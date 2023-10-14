@@ -160,11 +160,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 }
 
 void UKF::Prediction(double delta_t) {
-  /**
-   * TODO: Complete this function! Estimate the object's location. 
-   * Modify the state vector, x_. Predict sigma points, the state, 
-   * and the state covariance matrix.
-   */
+
+  /* Generate augmented sigma point */
+
   // Make augmented mean vector
   VectorXd x_aug = VectorXd(n_aug_);
   x_aug.head(5) = x_;
@@ -190,15 +188,89 @@ void UKF::Prediction(double delta_t) {
     Xsig_aug.col(i + 1) = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
     Xsig_aug.col(i + 1 + n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
   }
+
+  /* Predict Sigman point*/
+
+  // create matrix with predicted sigma points as columns
+  // predict sigma points
+  for(int i = 0; i < 2 * n_aug_ + 1; i++){
+    double px = Xsig_aug(0, i);
+    double py = Xsig_aug(1, i);
+    double v = Xsig_aug(2, i);
+    double yaw = Xsig_aug(3, i);
+    double yawd = Xsig_aug(4, i);
+    double nu_a = Xsig_aug(5, i);
+    double nu_yawdd = Xsig_aug(6, i);
+
+    // predict the state
+    double px_pred, py_pred;
+
+    // avoid division by zero
+    if(fabs(yawd) > 0.001){
+      px_pred = px + v / yawd * (sin(yaw + yawd * delta_t) - sin(yaw));
+      py_pred = py + v / yawd * (-1 * cos(yaw + yawd * delta_t) + cos(yaw));
+    }
+    else{
+      px_pred = px + v * cos(yaw) * delta_t;
+      py_pred = py + v * sin(yaw) * delta_t;
+    }
+
+    double v_pred = v;
+    double yaw_pred = yaw + yawd * delta_t;
+    double yawd_pred = yawd;
+
+    // add noise
+    px_pred += 0.5 * delta_t * delta_t * cos(yaw) * nu_a;
+    py_pred += 0.5 * delta_t * delta_t * sin(yaw) * nu_a;
+    v_pred += delta_t * nu_a;
+    yaw_pred += 0.5 * delta_t * delta_t * nu_yawdd;
+    yawd_pred += delta_t * nu_yawdd;
+
+    //write predicted sigma points into right column
+    Xsig_pred_(0, i) = px_pred;
+    Xsig_pred_(1, i) = py_pred;
+    Xsig_pred_(2, i) = v_pred;
+    Xsig_pred_(3, i) = yaw_pred;
+    Xsig_pred_(4, i) = yawd_pred;
+  }
+
+  /* 3. Predict mean and covariance */
+
+  // predict state mean
+  x_.fill(0.0);
+  for(int i = 0; i < 2 * n_aug_ + 1; i++){
+    x_ = x_ + weights_(i) * Xsig_pred_.col(i);
+  }
+
+  // predict state covariance matrix
+  P_.fill(0.0);
+  for(int i = 0; i < 2 * n_aug_ + 1; i++){
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+
+    while (x_diff(3) > M_PI) {
+      x_diff(3) -= 2.0 * M_PI;
+    }
+    while (x_diff(3) < -M_PI) {
+      x_diff(3) += 2.0 * M_PI;
+    }
+
+    P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
+  }
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-   * TODO: Complete this function! Use lidar data to update the belief 
-   * about the object's position. Modify the state vector, x_, and 
-   * covariance, P_.
-   * You can also calculate the lidar NIS, if desired.
-   */
+  
+  // set measurement dimension
+  int n_z = 2;
+
+  // Matrix for sigman points in measurement space
+  MatrixXd Zsig = MatrixXd(n_z, 2*n_aug_ + 1);
+
+  //mean prediction measurement
+  VectorXd z_pred = VectorXd(n_z);
+
+  // measurement covariance matrix S
+  MatrixXd S = MatrixXd(n_z, n_z);
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
